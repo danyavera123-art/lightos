@@ -1,0 +1,73 @@
+# LightOS — ядро и базовая система
+linux-image-amd64
+locales
+sudo
+policykit-1
+dbus
+
+# Графический стек (Xorg)
+xserver-xorg-core
+xserver-xorg-input-all
+xserver-xorg-input-libinput
+xserver-xorg-video-vesa
+xserver-xorg-video-fbdev
+xinit
+
+# Дисплейный менеджер
+lightdm
+lightdm-gtk-greeter
+lightdm-gtk-greeter-settings
+
+# Сеть
+network-manager
+
+# Звук
+pulseaudio
+pavucontrol
+alsa-utils
+pulseaudio-module-bluetooth
+
+# Bluetooth
+bluez
+bluez-tools
+
+# Файловые системы и диски
+gvfs
+gvfs-backends
+gvfs-fuse
+udisks2
+exfatprogs
+ntfs-3g
+
+# Утилиты
+curl
+wget
+gpg
+rsync
+ca-certificates
+bash-completion
+xdg-utils
+xdg-user-dirs
+htop
+neofetch
+yad
+file
+
+# Сжатие ОЗУ (важно для 4 ГБ)
+zram-tools
+
+# Загрузчик (нужен установщику для записи на диск)
+grub-pc
+grub-efi-amd64
+efibootmgr
+os-prober
+parted
+gdisk
+dosfstools
+
+# Прошивки Wi-Fi/звук/видео
+firmware-linux
+firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-brcm80211

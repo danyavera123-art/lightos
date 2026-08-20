@@ -1,0 +1,20 @@
+#!/bin/bash
+# LightOS: авто-вход в live-режиме и включение служб
+set -e
+
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/10-lightos-autologin.conf <<'EOF'
+[Seat:*]
+autologin-user=lightos
+autologin-user-timeout=0
+EOF
+
+systemctl enable lightdm NetworkManager bluetooth 2>/dev/null || true
+systemctl set-default graphical.target 2>/dev/null || true
+
+# live-пользователь запускает установщик без пароля (только в live-сессии)
+mkdir -p /etc/sudoers.d
+echo 'lightos ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/10-lightos-live
+chmod 440 /etc/sudoers.d/10-lightos-live
+
+exit 0

@@ -1,0 +1,19 @@
+# Артефакты сборки
+build.log
+build_run.log
+*.iso
+.build/
+binary/
+chroot/
+cache/
+config/binary
+config/bootstrap
+config/chroot
+config/common
+config/source
+config/template
+config/clean
+config/install
+config/linux
+config/archives
+*.tmp

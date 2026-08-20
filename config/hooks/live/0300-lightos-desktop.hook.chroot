@@ -1,0 +1,23 @@
+#!/bin/bash
+# LightOS: иконка установщика на рабочем столе live-пользователя
+set -e
+
+DESK="/home/lightos/Desktop"
+mkdir -p "$DESK"
+
+cat > "$DESK/install.desktop" <<'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Установить LightOS
+Comment=Установить систему на диск
+Exec=sudo calamares
+Icon=lightos-logo
+Terminal=false
+Categories=System;
+EOF
+chmod +x "$DESK/install.desktop"
+
+chown -R lightos:lightos "$DESK"
+
+exit 0

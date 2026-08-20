@@ -1,0 +1,25 @@
+# LightOS — рабочий стол XFCE
+xfce4
+xfce4-terminal
+xfce4-whiskermenu-plugin
+xfce4-pulseaudio-plugin
+xfce4-power-manager
+xfce4-screenshooter
+xfce4-clipman-plugin
+xfce4-notifyd
+thunar
+thunar-archive-plugin
+file-roller
+
+# Темы и иконки
+papirus-icon-theme
+gtk2-engines-murrine
+
+# Шрифты
+fonts-dejavu-core
+fonts-liberation
+
+# Программы по умолчанию
+firefox-esr
+mousepad
+ristretto

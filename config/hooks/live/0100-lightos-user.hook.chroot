@@ -1,0 +1,13 @@
+#!/bin/bash
+# LightOS: live-пользователь (для загрузки с флешки)
+set -e
+
+if ! id lightos >/dev/null 2>&1; then
+  useradd -m -s /bin/bash lightos
+  echo 'lightos:lightos' | chpasswd
+  usermod -aG sudo,audio,video,plugdev,netdev,input,cdrom lightos
+fi
+
+echo 'root:lightos' | chpasswd
+
+exit 0

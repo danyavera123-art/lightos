@@ -1,0 +1,50 @@
+# LightOS-Dark xfwm4 theme
+
+title_color = #e6e8ee
+label_active_color = #e6e8ee
+label_inactive_color = #8b93a1
+active_text_color = #e6e8ee
+inactive_text_color = #8b93a1
+
+active_color = #1a1e26
+inactive_color = #1a1e26
+title_active_color = #1a1e26
+title_inactive_color = #1a1e26
+button_color = #1a1e26
+button_active_color = #1a1e26
+button_inactive_color = #1a1e26
+
+border_width = 1
+frame_border_color = #2c323d
+active_border_color = #17b8c4
+inactive_border_color = #2c323d
+
+active_hilight_1 = #17b8c4
+active_hilight_2 = #0f7f8a
+active_mid_1 = #17b8c4
+active_mid_2 = #0f7f8a
+active_low_1 = #1a1e26
+active_low_2 = #1a1e26
+
+inactive_hilight_1 = #2c323d
+inactive_hilight_2 = #2c323d
+inactive_mid_1 = #1a1e26
+inactive_mid_2 = #1a1e26
+inactive_low_1 = #1a1e26
+inactive_low_2 = #1a1e26
+
+title_hilight_1 = #17b8c4
+title_hilight_2 = #0f7f8a
+title_mid_1 = #1a1e26
+title_mid_2 = #1a1e26
+title_low_1 = #1a1e26
+title_low_2 = #1a1e26
+
+title_vertical_offset_active = 0
+title_vertical_offset_inactive = 0
+title_shadow_active = false
+title_shadow_inactive = false
+button_offset = 0
+button_spacing = 0
+full_width_title = true
+hide_buttons = false

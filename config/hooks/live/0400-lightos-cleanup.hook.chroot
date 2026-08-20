@@ -1,0 +1,13 @@
+#!/bin/bash
+# LightOS: очистка системы перед созданием образа
+set -e
+
+apt-get -y autoremove --purge 2>/dev/null || true
+apt-get clean 2>/dev/null || true
+rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+rm -f /var/cache/apt/archives/*.deb 2>/dev/null || true
+
+# machine-id сгенерируется заново при установке
+rm -f /etc/machine-id /var/lib/dbus/machine-id 2>/dev/null || true
+
+exit 0

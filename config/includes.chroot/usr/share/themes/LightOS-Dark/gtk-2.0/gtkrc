@@ -1,0 +1,26 @@
+# LightOS-Dark gtk2 theme (fallback)
+gtk-color-scheme = "bg_color:#1e222a\nfg_color:#e6e8ee\nbase_color:#161a21\ntext_color:#e6e8ee\nselected_bg_color:#0f7f8a\nselected_fg_color:#ffffff"
+
+style "lightos-widgets" {
+    bg[NORMAL]    = "#1e222a"
+    bg[SELECTED]  = "#0f7f8a"
+    bg[ACTIVE]    = "#333a47"
+    bg[INSENSITIVE] = "#161a21"
+    fg[NORMAL]    = "#e6e8ee"
+    fg[SELECTED]  = "#ffffff"
+    fg[ACTIVE]    = "#e6e8ee"
+    fg[INSENSITIVE] = "#6b7380"
+    base[NORMAL]  = "#161a21"
+    base[SELECTED]= "#0f7f8a"
+    text[NORMAL]  = "#e6e8ee"
+    text[SELECTED]= "#ffffff"
+}
+
+style "lightos-button" {
+    bg[NORMAL] = "#333a47"
+    bg[ACTIVE] = "#0f7f8a"
+}
+
+widget "*" style "lightos-widgets"
+widget "GtkButton" style "lightos-button"
+widget "GtkToggleButton" style "lightos-button"

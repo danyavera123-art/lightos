@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=X-GTK-Metatheme
+Name=LightOS-Dark
+Comment=Тёмная тема LightOS
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=LightOS-Dark
+MetacityTheme=LightOS-Dark
+IconTheme=Papirus-Dark
+CursorTheme=Adwaita
+ButtonLayout=menu:minimize,maximize,close

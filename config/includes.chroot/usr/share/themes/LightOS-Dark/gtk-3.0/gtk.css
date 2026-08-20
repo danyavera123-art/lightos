@@ -1,0 +1,130 @@
+/* LightOS-Dark — GTK3 тема */
+@define-color bg_color     #1e222a;
+@define-color bg_dark      #161a21;
+@define-color fg_color     #e6e8ee;
+@define-color accent       #17b8c4;
+@define-color accent_dim   #0f7f8a;
+@define-color border_color #2c323d;
+@define-color hover_color  #333a47;
+
+* {
+    outline-color: @accent;
+}
+
+.background, window {
+    background-color: @bg_color;
+    color: @fg_color;
+}
+
+.dialog, .messagedialog, .csd {
+    background-color: @bg_color;
+    color: @fg_color;
+}
+
+headerbar, .titlebar {
+    background-color: @bg_dark;
+    color: @fg_color;
+    border: none;
+    border-bottom: 1px solid @border_color;
+    padding: 4px 8px;
+}
+
+button, .button {
+    background-image: none;
+    background-color: @hover_color;
+    color: @fg_color;
+    border: 1px solid @border_color;
+    border-radius: 6px;
+    padding: 4px 10px;
+}
+button:hover { background-color: #3d4655; }
+button:active, button:checked { background-color: @accent_dim; color: #ffffff; }
+button:disabled { color: #6b7380; }
+
+entry, .entry {
+    background-color: @bg_dark;
+    color: @fg_color;
+    border: 1px solid @border_color;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+entry:focus { border-color: @accent; }
+
+menu, .menu {
+    background-color: @bg_dark;
+    color: @fg_color;
+    border: 1px solid @border_color;
+    border-radius: 6px;
+}
+menuitem { color: @fg_color; }
+menuitem:hover { background-color: @accent_dim; color: #ffffff; }
+menubar { background-color: @bg_dark; color: @fg_color; }
+
+toolbar, .toolbar { background-color: @bg_dark; border: none; }
+
+scrollbar { background-color: transparent; }
+scrollbar slider {
+    background-color: #3a4250;
+    border-radius: 4px;
+    min-width: 8px;
+    min-height: 8px;
+}
+scrollbar slider:hover { background-color: @accent; }
+
+notebook { background-color: @bg_color; color: @fg_color; }
+notebook header { background-color: @bg_dark; border-color: @border_color; }
+notebook tab { background-color: @bg_dark; color: @fg_color; padding: 4px 12px; }
+notebook tab:checked { background-color: @bg_color; border-top: 2px solid @accent; color: @fg_color; }
+
+tooltip, .tooltip {
+    background-color: @bg_dark;
+    color: @fg_color;
+    border: 1px solid @border_color;
+    border-radius: 4px;
+}
+
+separator { background-color: @border_color; }
+
+progressbar trough { background-color: @bg_dark; border-radius: 4px; border: none; }
+progressbar progress { background-color: @accent; border-radius: 4px; border: none; }
+
+switch { background-color: @hover_color; border-radius: 12px; }
+switch:checked { background-color: @accent_dim; }
+switch slider { background-color: #ffffff; border-radius: 10px; min-width: 18px; min-height: 18px; }
+
+check, radio { background-color: @bg_dark; border: 1px solid @border_color; min-width: 16px; min-height: 16px; }
+check:checked, radio:checked { background-color: @accent; border-color: @accent; }
+checkbutton, radiobutton { color: @fg_color; }
+
+treeview, list { background-color: @bg_color; color: @fg_color; }
+treeview:selected, list row:selected { background-color: @accent_dim; color: #ffffff; }
+
+scale trough { background-color: @bg_dark; border-radius: 4px; min-height: 4px; }
+scale highlight { background-color: @accent; border-radius: 4px; }
+scale slider { background-color: #ffffff; border-radius: 8px; min-width: 14px; min-height: 14px; }
+
+combobox button { background-color: @hover_color; color: @fg_color; }
+
+/* --- XFCE панель --- */
+.xfce4-panel {
+    background-color: rgba(20, 24, 31, 0.92);
+    color: @fg_color;
+    border: none;
+}
+.xfce4-panel button,
+.xfce4-panel .button {
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+    color: @fg_color;
+    box-shadow: none;
+    padding: 4px 6px;
+}
+.xfce4-panel button:hover { background-color: rgba(255, 255, 255, 0.08); }
+.xfce4-panel button:checked { background-color: @accent_dim; color: #ffffff; }
+
+/* окна поверх рабочего стола */
+.wnck-pager { background-color: @bg_dark; color: @fg_color; }
+
+/* старые GTK2-приложения внутри панели не падают */
+GtkWindow { background-color: @bg_color; color: @fg_color; }

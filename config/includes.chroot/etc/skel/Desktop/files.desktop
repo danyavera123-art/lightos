@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Файлы
+Name[ru]=Файлы
+Comment=Менеджер файлов
+Comment[ru]=Менеджер файлов
+Exec=thunar
+Icon=system-file-manager
+Terminal=false
+Categories=System;

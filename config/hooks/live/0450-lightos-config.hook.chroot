@@ -1,0 +1,12 @@
+#!/bin/bash
+# LightOS: применение конфигов после установки пакетов
+# (пакеты calamares-settings, lightdm-gtk-greeter и xfce4-panel
+#  могли записать свои дефолтные файлы — наши должны победить)
+set -e
+
+SRC="/usr/share/lightos/config/etc"
+if [ -d "$SRC" ]; then
+  cp -a "$SRC/." /etc/
+fi
+
+exit 0

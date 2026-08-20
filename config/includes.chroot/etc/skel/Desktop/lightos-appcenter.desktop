@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Центр приложений
+Name[ru]=Центр приложений
+Comment=Установка программ и драйверов
+Exec=/usr/bin/lightos-appcenter.sh
+Icon=lightos-appcenter
+Terminal=false
+Categories=System;
