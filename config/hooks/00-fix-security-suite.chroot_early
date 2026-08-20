@@ -1,0 +1,6 @@
+#!/bin/sh
+# Debian 12: security suite = "bookworm-security", not "bookworm/updates"
+# (live-build 3.0~a57 пишет устаревшее имя — чиним до установки пакетов)
+if [ -f /etc/apt/sources.list ]; then
+	sed -i 's|bookworm/updates|bookworm-security|g' /etc/apt/sources.list
+fi

@@ -16,9 +16,12 @@ lb clean 2>/dev/null || true
 
 echo "==> Конфигурация live-build"
 lb config \
+  --mode debian \
   --distribution bookworm \
   --architectures amd64 \
   --system live \
+  --linux-flavours amd64 \
+  --linux-packages "linux-image" \
   --archive-areas "main contrib non-free-firmware" \
   --parent-mirror-bootstrap "http://deb.debian.org/debian/" \
   --parent-mirror-chroot "http://deb.debian.org/debian/" \
