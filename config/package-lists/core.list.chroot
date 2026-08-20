@@ -57,8 +57,10 @@ file
 zram-tools
 
 # Загрузчик (нужен установщику для записи на диск)
-grub-pc
-grub-efi-amd64
+# Метапакеты grub-pc и grub-efi-amd64 конфликтуют между собой —
+# ставим -bin версии (не конфликтуют, а grub-install/grub-mkconfig приходят с grub2-common)
+grub-pc-bin
+grub-efi-amd64-bin
 efibootmgr
 os-prober
 parted
