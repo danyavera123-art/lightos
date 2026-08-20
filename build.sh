@@ -39,6 +39,7 @@ lb config \
   --mirror-binary-volatile "http://deb.debian.org/debian/" \
   --bootstrap-keyring "debian-archive-keyring" \
   --keyring-packages "debian-archive-keyring" \
+  --security false \
   --binary-images iso-hybrid \
   --bootappend-live "boot=live components quiet splash" \
   --iso-application "LightOS" \
