@@ -28,7 +28,7 @@ wsl --install
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y live-build debootstrap xorriso isolinux syslinux-common squashfs-tools mtools dosfstools genisoimage grub-efi-amd64-bin
+sudo apt install -y live-build debootstrap debian-archive-keyring xorriso isolinux syslinux-common squashfs-tools mtools dosfstools grub-efi-amd64-bin grub-pc-bin ca-certificates
 ```
 
 ## 3. Копирование проекта и сборка
@@ -36,17 +36,21 @@ sudo apt install -y live-build debootstrap xorriso isolinux syslinux-common squa
 Скопируй папку `lightos` в домашний каталог Ubuntu:
 
 ```bash
-cp -r /mnt/c/Users/<твой_пользователь>/Documents/Default\ Project/lightos ~/lightos
+cp -r /mnt/c/<путь-к>/lightos ~/lightos
 cd ~/lightos
-chmod -R +x build.sh config/hooks config/includes.chroot/usr/bin
+chmod +x build.sh
+sudo env SKIP_RELEASE=1 ./build.sh
+```
+
+Сборка идёт 30–90 минут. Готовый образ: `~/lightos/lightos.iso`.
+
+Чтобы сразу залить ISO в GitHub Releases, поставь [GitHub CLI](https://cli.github.com/), выполни `gh auth login` и собери без `SKIP_RELEASE`:
+
+```bash
 sudo ./build.sh
 ```
 
-Сборка идёт 30–90 минут. Готовый образ появится в `~/lightos`:
-
-```
-live-image-amd64.hybrid.iso
-```
+На GitHub Actions (ветка `main` или кнопка **Run workflow**) ISO собирается в контейнере Debian 12 и публикуется в [Releases](https://github.com/danyavera123-art/lightos/releases).
 
 ## 4. Запись на флешку и установка
 
@@ -75,6 +79,7 @@ live-image-amd64.hybrid.iso
 lightos/
 ├── build.sh                      # сборка ISO через live-build
 ├── config/
+│   ├── archives/                 # bookworm-security и bookworm-updates (без устаревшего bookworm/updates)
 │   ├── package-lists/            # пакеты ядра/графики/приложений
 │   ├── hooks/live/               # скрипты сборки (пользователь live, авто-вход, иконки)
 │   └── includes.chroot/          # файлы, попадающие в систему

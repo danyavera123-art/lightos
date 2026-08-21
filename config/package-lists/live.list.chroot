@@ -1,0 +1,4 @@
+# Нужны, чтобы live-ISO загружался (squashfs + live-config)
+live-boot
+live-config
+live-config-systemd

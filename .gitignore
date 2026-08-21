@@ -2,6 +2,7 @@
 build.log
 build_run.log
 *.iso
+SHA256SUMS
 .build/
 binary/
 chroot/
@@ -15,5 +16,4 @@ config/template
 config/clean
 config/install
 config/linux
-config/archives
 *.tmp

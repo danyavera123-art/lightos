@@ -1,0 +1,9 @@
+#!/bin/bash
+# Debian 12: live-build (особенно на Ubuntu) пишет suite bookworm/updates
+# вместо bookworm-security. Исправляем до/после установки пакетов.
+set -e
+
+find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -print0 2>/dev/null \
+  | xargs -0 -r sed -i 's|bookworm/updates|bookworm-security|g'
+
+exit 0

@@ -1,13 +1,23 @@
 #!/bin/bash
-# LightOS: очистка системы перед созданием образа
+# LightOS: очистка системы перед созданием squashfs/ISO
 set -e
 
 apt-get -y autoremove --purge 2>/dev/null || true
 apt-get clean 2>/dev/null || true
 rm -rf /var/lib/apt/lists/* 2>/dev/null || true
 rm -f /var/cache/apt/archives/*.deb 2>/dev/null || true
+rm -rf /var/cache/apt/archives/partial 2>/dev/null || true
 
 # machine-id сгенерируется заново при установке
 rm -f /etc/machine-id /var/lib/dbus/machine-id 2>/dev/null || true
+
+# Ужимаем ISO (лимит GitHub Releases — 2 ГБ на файл)
+rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/lintian 2>/dev/null || true
+if [ -d /usr/share/locale ]; then
+  find /usr/share/locale -mindepth 1 -maxdepth 1 \
+    ! -name 'en' ! -name 'en_US' ! -name 'en_GB' \
+    ! -name 'ru' ! -name 'ru_RU' \
+    -exec rm -rf {} + 2>/dev/null || true
+fi
 
 exit 0
