@@ -26,19 +26,36 @@ concurrency:
 
 jobs:
   build:
+    # Собираем внутри debian:bookworm, а не на ubuntu-latest.
+    #
+    # На ubuntu-latest (noble) ставится live-build 3.0~a57-1. Он при
+    # установке ядра качает
+    #     dists/<дистрибутив>/Contents-<архитектура>.gz
+    # но Debian давно перенёс Contents внутрь компонентов:
+    #     dists/bookworm/Contents-amd64.gz          -> 404
+    #     dists/bookworm/main/Contents-amd64.gz    -> 200
+    # и сборка падает с «ERROR 404» на этапе lb_chroot_linux-image.
+    #
+    # В bookworm живёт live-build 20230502, который Contents не качает
+    # вовсе, плюс это тот же дистрибутив, который мы собираем.
+    runs-on: ubuntu-latest
+    container:
+      image: debian:bookworm
     # 4 ГБ RAM: debootstrap + установка 700+ пакетов + squashfs с xz.
     # На 2 ГБ live-build умирает на этапе сжатия.
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
 
     steps:
-      - name: Берём исходники
-        uses: actions/checkout@v4
-
+      # checkout требует git, а в образе debian:bookworm его нет.
+      # Поэтому ставим зависимости ДО checkout.
       - name: Ставим зависимости
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          set -e
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            git \
+            ca-certificates \
             live-build \
             debootstrap \
             debian-archive-keyring \
@@ -52,44 +69,38 @@ jobs:
             fdisk \
             grub-pc-bin \
             grub-efi-amd64-bin \
-            ca-certificates
-
-      - name: Проверяем, что live-build живой
-        run: |
+            curl \
+            file
+          echo "--- версии ---"
           lb --version
           debootstrap --version
-          echo "OK: сборка может идти"
+
+      - name: Берём исходники
+        uses: actions/checkout@v4
 
       - name: Собираем ISO
-        env:
-          # build.sh читает RELEASE_TAG, чтобы опубликовать ISO
-          # под тем же тегом, под которым выходит пакет обновления.
-          RELEASE_TAG: v${{ github.event.inputs.version }}
         run: |
           set -e
           VERSION='${{ github.event.inputs.version }}'
           TAG="v${VERSION}"
           echo "::group::Сборка LightOS ${TAG}"
 
-          # Скачиваем ISO в отдельный каталог, чтобы build.sh
-          # ничего не испортил в рабочем дереве репозитория
+          # В контейнере мы уже root. На обычном раннере был бы нужен sudo,
+          # поэтому оставляем запасной вариант.
+          SUDO=""
+          if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+
           OUT="$PWD/_artifacts"
           mkdir -p "$OUT"
 
-          # build.sh требует root (debootstrap и mksquashfs иначе не запустить),
-          # а раннер Actions работает от пользователя runner — нужен sudo.
-          # SKIP_RELEASE=1: публикацией занимается отдельный шаг ниже, где
-          # задан GH_TOKEN. RELEASE_TAG прокидываем явно, потому что sudo
-          # не наследует переменные окружения.
-          sudo env SKIP_RELEASE=1 RELEASE_TAG="${TAG}" \
+          # SKIP_RELEASE=1: публикацией занимается отдельная работа ниже,
+          # где есть gh и токен. RELEASE_TAG прокидываем явно, потому что
+          # sudo не наследует переменные окружения.
+          $SUDO env SKIP_RELEASE=1 RELEASE_TAG="${TAG}" \
             bash ./build.sh --output-dir "${OUT}" || {
             echo "::error::Сборка упала. Лог выше — ищите строку с ошибкой live-build."
             exit 1
           }
-
-          # сборка шла от root — вернуём файлы владельцу раннера,
-          # иначе следующие шаги не смогут их переместить
-          sudo chown -R "$(id -u):$(id -g)" "${OUT}"
 
           ISO=$(find "$OUT" -maxdepth 1 -name '*.iso' | head -1)
           [ -n "$ISO" ] || { echo "::error::ISO не найден в $OUT"; ls -la "$OUT"; exit 1; }
@@ -107,25 +118,22 @@ jobs:
           ( cd "$OUT" && sha256sum "lightos-${VERSION}.iso" > "lightos-${VERSION}.iso.sha256" )
           ls -la "$OUT"
 
-          echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "ARTIFACT=$(ls "$OUT" | grep '\.iso$')" >> "$GITHUB_ENV"
-
-      - name: Прикрепляем ISO к репозиторию
-        uses: actions/upload-artifact@v4
-        with:
-          name: lightos-${{ github.event.inputs.version }}
-          path: |
-            _artifacts/lightos-${{ github.event.inputs.version }}.iso
-            _artifacts/lightos-${{ github.event.inputs.version }}.iso.sha256
-          retention-days: 90
-          if-no-files-found: error
-
       - name: Готовим пакет обновления (для кнопки «Обновить LightOS»)
         run: |
           set -e
           VERSION='${{ github.event.inputs.version }}'
           bash ./make-update-payload.sh "$VERSION"
           ls -la dist-update/
+
+      - name: Прикрепляем ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightos-iso-${{ github.event.inputs.version }}
+          path: |
+            _artifacts/lightos-${{ github.event.inputs.version }}.iso
+            _artifacts/lightos-${{ github.event.inputs.version }}.iso.sha256
+          retention-days: 90
+          if-no-files-found: error
 
       - name: Прикрепляем пакет обновления
         uses: actions/upload-artifact@v4
@@ -137,17 +145,53 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
+      - name: Итог сборки
+        run: |
+          {
+            echo "### Сборка ${{ github.event.inputs.version }} завершена"
+            echo ""
+            echo "| Файл | Размер |"
+            echo "|---|---|"
+            ls -la _artifacts/ dist-update/ 2>/dev/null | grep -E '\.iso|\.tar\.gz' \
+              | awk '{printf "| %s | %s |\n", $9, $5}'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    # Отдельная работа на обычном раннере: здесь есть gh CLI и токен.
+    # В контейнере debian:bookworm gh нет, а ставить его ради одного шага
+    # смысла не было.
+    needs: build
+    if: github.event.inputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Скачиваем артефакты
+        uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+
       - name: Публикуем в Releases
-        if: github.event.inputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: v${{ github.event.inputs.version }}
         run: |
           set -e
           VERSION='${{ github.event.inputs.version }}'
+          REPO="$GITHUB_REPOSITORY"
 
-          # YAML убирает общий отступ блока run, поэтому строки heredoc
-          # начинаются с нуля — «<<-EOT» не нужен и табы не требуются.
+          echo "::group::Файлы к публикации"
+          ls -la files/
+          MISSING=""
+          for f in "files/lightos-${VERSION}.iso" "files/lightos-${VERSION}.iso.sha256" "files/lightos-update-${VERSION}.tar.gz" "files/SHA256SUMS"; do
+            [ -f "$f" ] || MISSING="$MISSING $f"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::Не хватает файлов:$MISSING"
+            exit 1
+          fi
+
           cat > release-notes.md <<EOT
           ## LightOS ${TAG}
 
@@ -165,8 +209,7 @@ jobs:
           * Кнопка «Обновить LightOS» — обновляет систему через интернет,
             без флешки и без другого компьютера.
           * Кнопка «Оптимизация» — отключает композитор и анимации.
-          * Исправлена битая опция --bootstrap-keyring, из-за которой
-            сборка падала на lb config.
+          * Откат обновления: sudo lightos-update --rollback
 
           ### Файлы
           | Файл | Для чего |
@@ -182,40 +225,33 @@ jobs:
           3. После установки: Центр приложений -> «Драйверы».
           EOT
 
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             echo "Релиз $TAG уже существует — перезаписываем файлы"
             gh release upload "$TAG" \
-              "dist-update/lightos-update-${VERSION}.tar.gz" \
-              dist-update/SHA256SUMS \
-              "_artifacts/lightos-${VERSION}.iso" \
-              "_artifacts/lightos-${VERSION}.iso.sha256" \
-              --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$TAG" --notes-file release-notes.md --repo "$GITHUB_REPOSITORY"
+              "files/lightos-${VERSION}.iso" \
+              "files/lightos-${VERSION}.iso.sha256" \
+              "files/lightos-update-${VERSION}.tar.gz" \
+              "files/SHA256SUMS" \
+              --repo "$REPO" --clobber
+            gh release edit "$TAG" --notes-file release-notes.md --repo "$REPO"
           else
             gh release create "$TAG" \
-              "_artifacts/lightos-${VERSION}.iso" \
-              "_artifacts/lightos-${VERSION}.iso.sha256" \
-              "dist-update/lightos-update-${VERSION}.tar.gz" \
-              dist-update/SHA256SUMS \
-              --repo "$GITHUB_REPOSITORY" \
+              "files/lightos-${VERSION}.iso" \
+              "files/lightos-${VERSION}.iso.sha256" \
+              "files/lightos-update-${VERSION}.tar.gz" \
+              "files/SHA256SUMS" \
+              --repo "$REPO" \
               --title "LightOS $TAG" \
               --notes-file release-notes.md
           fi
 
-          echo "::notice::Опубликовано: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          URL="https://github.com/${REPO}/releases/tag/${TAG}"
+          echo "::notice::Опубликовано: $URL"
+          echo "Опубликовано: $URL" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Итог
-        run: |
-          echo "### Сборка ${TAG} завершена" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Файл | Размер |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          ls -la _artifacts/ dist-update/ 2>/dev/null | grep -E '\.iso|\.tar\.gz' \
-            | awk '{printf "| %s | %s |\n", $9, $5}' >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ github.event.inputs.publish }}" = "true" ]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Опубликовано: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Публикация была отключена. Скачайте ISO из артефактов этого запуска." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          # Releases по умолчанию показывают «последний» релиз. Без этого
+          # --latest кнопка «Обновить LightOS» не найдёт новую версию,
+          # потому что GitHub считает latest по дате публикации.
+          gh release edit "$TAG" --repo "$REPO" --latest >/dev/null 2>&1 \
+            && echo "Релиз помечен как последний" \
+            || echo "::warning::не удалось пометить релиз как последний"
