@@ -1,7 +1,7 @@
 name: Диагностика live-build
 
-# Временный воркфлоу: печатает версию и полный список опций lb config,
-# чтобы build.sh не ловил удалённые опции по одной.
+# Временный воркфлоу: достаём установленный live-build, чтобы понять,
+# зачем он качает Contents-amd64.gz и как это обойти.
 on:
   workflow_dispatch:
 
@@ -18,16 +18,28 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends live-build debootstrap
-      - name: Версия и опции
+      - name: Где лежит и что качает Contents
         run: |
-          echo "### lb --version"
-          lb --version
+          echo "### файлы live-build"
+          dpkg -L live-build | grep -E 'bin|/lb_' | head -30
           echo
-          echo "### apt: какой live-build стоит"
-          apt-cache policy live-build
+          echo "### где в коде упоминается Contents"
+          grep -rn 'Contents-' /usr/bin/lb_* /usr/share/live/build/ 2>/dev/null | head -20
           echo
-          echo "### lb config --help (полный)"
-          lb config --help 2>&1
+          echo "### сам кусок кода вокруг Contents"
+          for f in /usr/bin/lb_* /usr/share/live/build/*; do
+            [ -f "$f" ] || continue
+            if grep -q 'Contents-' "$f" 2>/dev/null; then
+              echo "--- $f ---"
+              grep -n -B12 -A12 'Contents-' "$f" | head -70
+            fi
+          done
           echo
-          echo "### опции одним списком"
-          lb config --help 2>&1 | grep -oE '\-\-[a-z0-9-]+' | sort -u
+          echo "### существует ли Contents на зеркале"
+          for u in \
+            http://deb.debian.org/debian/dists/bookworm/Contents-amd64.gz \
+            http://deb.debian.org/debian/dists/bookworm/main/Contents-amd64.gz \
+            http://deb.debian.org/debian/dists/bookworm/Contents-all.gz ; do
+            printf '%s -> ' "$u"
+            curl -s -o /dev/null -w '%{http_code}\n' "$u"
+          done
