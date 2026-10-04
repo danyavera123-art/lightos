@@ -172,11 +172,18 @@ echo "==> Конфигурация live-build"
 # падает с «unrecognized option '--updates'». У старого live-build они
 # отключали несуществующий suite bookworm/updates; у нового за этот suite
 # отвечает хук 0000-fix-security-suite. Ниже опции добавляются через lb_has.
+# Компоненты, которые будут видны в chroot. Объявлено отдельно, потому что
+# используется в двух местах: в --archive-areas и в проверке списка пакетов.
+# non-free обязателен: broadcom-sta-dkms (Wi-Fi Broadcom) лежит именно в
+# non-free, а не в non-free-firmware. Без него chroot его не видит и сборка
+# падает с «Unable to locate package broadcom-sta-dkms».
+ARCHIVE_AREAS="main contrib non-free non-free-firmware"
+
 LB_ARGS=(
   --distribution bookworm
   --system live
   --linux-flavours amd64
-  --archive-areas "main contrib non-free-firmware"
+  --archive-areas "$ARCHIVE_AREAS"
   --mirror-bootstrap "http://deb.debian.org/debian/"
   --mirror-chroot "http://deb.debian.org/debian/"
   --mirror-chroot-security "http://security.debian.org/debian-security/"
@@ -291,30 +298,42 @@ PKGCOUNT="$(printf '%s\n' "$PKGLIST" | grep -c . || true)"
 if command -v curl >/dev/null 2>&1; then
   echo "    пакетов в списках: $PKGCOUNT"
   TMPIDX="$(mktemp -d /tmp/lb-idx.XXXXXX)"
-  # main + contrib + non-free + non-free-firmware: пакет может лежать в любой
-  for suite in main contrib non-free non-free-firmware; do
-    URL="http://deb.debian.org/debian/dists/bookworm/${suite}/binary-amd64/Packages.gz"
-    curl -fsSL --connect-timeout 10 --max-time 120 "$URL" -o "$TMPIDX/$suite.gz" 2>/dev/null || true
-  done
-  if ls "$TMPIDX"/*.gz >/dev/null 2>&1; then
-    cat "$TMPIDX"/*.gz 2>/dev/null | gzip -dc 2>/dev/null \
-      | grep '^Package: ' | sed 's/^Package: //' | sort -u > "$TMPIDX/all.txt" 2>/dev/null || true
-    if [ -s "$TMPIDX/all.txt" ]; then
-      MISSING_LIST="$(printf '%s\n' "$PKGLIST" | grep . | grep -vxF -f "$TMPIDX/all.txt" || true)"
-      if [ -n "$MISSING_LIST" ]; then
-        echo "!! ВНИМАНИЕ: эти пакеты НЕ НАЙДЕНЫ в bookworm:" >&2
-        printf '%s\n' "$MISSING_LIST" | sed 's/^/       /' >&2
-        echo "   Сборка упадёт на этапе установки пакетов. Исправьте списки" >&2
-        echo "   в config/package-lists/ и запустите сборку заново." >&2
-        rm -rf "$TMPIDX"
-        exit 1
-      fi
-      echo "    все $PKGCOUNT пакетов найдены в bookworm"
+
+  # Проверять надо по тем компонентам, которые реально включены в chroot,
+  # а не по объединению всех индексов Debian. Раньше здесь качались все
+  # четыре компонента и проверка проходила, а потом chroot не смог найти
+  # broadcom-sta-dkms: он лежит в non-free, которого в списках не было.
+  ENABLED_COMPONENTS="$ARCHIVE_AREAS"
+  echo "    включённые компоненты: $ENABLED_COMPONENTS"
+
+  : > "$TMPIDX/enabled.txt"
+  for comp in $ENABLED_COMPONENTS; do
+    URL="http://deb.debian.org/debian/dists/bookworm/${comp}/binary-amd64/Packages.gz"
+    if curl -fsSL --connect-timeout 10 --max-time 120 "$URL" -o "$TMPIDX/$comp.gz" 2>/dev/null; then
+      gzip -dc "$TMPIDX/$comp.gz" 2>/dev/null \
+        | grep '^Package: ' | sed 's/^Package: //' >> "$TMPIDX/enabled.txt" || true
     else
-      echo "    (индексы пустые — пропускаем проверку)"
+      echo "    (не скачался индекс компонента $comp)"
     fi
+  done
+  sort -u "$TMPIDX/enabled.txt" -o "$TMPIDX/enabled.txt" 2>/dev/null || true
+
+  if [ -s "$TMPIDX/enabled.txt" ]; then
+    MISSING_LIST="$(printf '%s\n' "$PKGLIST" | grep . | grep -vxF -f "$TMPIDX/enabled.txt" || true)"
+    if [ -n "$MISSING_LIST" ]; then
+      echo "!! ВНИМАНИЕ: эти пакеты НЕ НАЙДЕНЫ в bookworm" \
+           "в компонентах [$ENABLED_COMPONENTS]:" >&2
+      printf '%s\n' "$MISSING_LIST" | sed 's/^/       /' >&2
+      echo "   Сборка упадёт на этапе установки пакетов." >&2
+      echo "   Либо уберите пакет из config/package-lists/, либо добавьте" >&2
+      echo "   нужный компонент в --archive-areas (build.sh) и в" >&2
+      echo "   config/archives/*.list.{chroot,binary}." >&2
+      rm -rf "$TMPIDX"
+      exit 1
+    fi
+    echo "    все $PKGCOUNT пакетов найдены в компонентах [$ENABLED_COMPONENTS]"
   else
-    echo "    (не удалось скачать индексы — пропускаем проверку)"
+    echo "    (индексы пустые — пропускаем проверку)"
   fi
   rm -rf "$TMPIDX"
 else

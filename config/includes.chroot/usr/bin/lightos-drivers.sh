@@ -100,7 +100,9 @@ detect_gpu() {
       -> intel (встроенная графика, через неё идёт вывод на экран)"
         ;;
       10de)
-        PKGS+=(xserver-xorg-video-nouveau firmware-nonfree)
+        # firmware-nonfree в bookworm не существует: с 2019 прошивки
+        # nouveau живут в самом драйвере, отдельного пакета с ними нет.
+        PKGS+=(xserver-xorg-video-nouveau)
         note="${note}
       -> nouveau. Для игр лучше nvidia-driver — но нужен перезапуск
          и выбор драйвера в lightdm (nvidia-settings от root)"
@@ -181,7 +183,7 @@ detect_wifi() {
       ;;
     *Intel*)   PKGS+=(firmware-iwlwifi iw rfkill) ;;
     *Atheros*) PKGS+=(firmware-atheros iw rfkill) ;;
-    *MediaTek*|*Ralink*) PKGS+=(firmware-raltek iw rfkill) ;;
+    *MediaTek*|*Ralink*) PKGS+=(firmware-realtek iw rfkill) ;;
     *Qualcomm*) PKGS+=(firmware-iwlwifi iw rfkill) ;;
     *)
       PKGS+=(firmware-linux iw rfkill)
