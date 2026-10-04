@@ -76,10 +76,20 @@ jobs:
           OUT="$PWD/_artifacts"
           mkdir -p "$OUT"
 
-          bash ./build.sh --output-dir "$OUT" || {
+          # build.sh требует root (debootstrap и mksquashfs иначе не запустить),
+          # а раннер Actions работает от пользователя runner — нужен sudo.
+          # SKIP_RELEASE=1: публикацией занимается отдельный шаг ниже, где
+          # задан GH_TOKEN. RELEASE_TAG прокидываем явно, потому что sudo
+          # не наследует переменные окружения.
+          sudo env SKIP_RELEASE=1 RELEASE_TAG="${TAG}" \
+            bash ./build.sh --output-dir "${OUT}" || {
             echo "::error::Сборка упала. Лог выше — ищите строку с ошибкой live-build."
             exit 1
           }
+
+          # сборка шла от root — вернуём файлы владельцу раннера,
+          # иначе следующие шаги не смогут их переместить
+          sudo chown -R "$(id -u):$(id -g)" "${OUT}"
 
           ISO=$(find "$OUT" -maxdepth 1 -name '*.iso' | head -1)
           [ -n "$ISO" ] || { echo "::error::ISO не найден в $OUT"; ls -la "$OUT"; exit 1; }
