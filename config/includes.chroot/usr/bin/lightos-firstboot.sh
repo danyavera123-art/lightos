@@ -31,12 +31,12 @@ LightOS — первые шаги
 2. Проверить Wi-Fi и звук: там же, кнопка "Драйверы".
 
 3. Ускорить систему:
-     lightos-perf.sh
+     lightos-perf
    (отключает композитор и анимации — на этом ноутбуке это заметно
    помогает и в обычной работе, и в играх)
 
 4. Проверить, есть ли обновление LightOS:
-     sudo lightos-update.sh --check
+     sudo lightos-update --check
 EOF
 chmod +x "$HOME/Desktop/lightos-Что-делать.txt" 2>/dev/null || true
 

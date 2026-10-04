@@ -85,22 +85,22 @@ install_apt() {
 install_drivers() {
   if [ ! -x /usr/local/bin/lightos-drivers ]; then
     run_terminal "Установка драйверов" \
-      "sudo /usr/bin/lightos-drivers.sh"
+      "sudo /usr/local/lib/lightos/bin/lightos-drivers.sh"
     return
   fi
   run_terminal "Установка драйверов (LightOS)" \
-    "sudo lightos-drivers"
+    "sudo /usr/local/bin/lightos-drivers"
 }
 
 # --- Оптимизация ----------------------------------------------------------
 run_perf() {
-  run_terminal_plain "Оптимизация LightOS" "lightos-perf.sh"
+  run_terminal_plain "Оптимизация LightOS" "/usr/local/bin/lightos-perf"
 }
 
 # --- Обновление LightOS (по кнопке, без флешки) ---------------------------
 update_lightos() {
   run_terminal "Обновление LightOS" \
-    "sudo /usr/bin/lightos-update.sh"
+    "sudo /usr/local/bin/lightos-update"
 }
 
 # --- Обновление системы (пакеты Debian) -----------------------------------
@@ -112,7 +112,7 @@ update_system() {
 # --- Диагностика ----------------------------------------------------------
 diagnostics() {
   run_terminal_plain "Диагностика LightOS" \
-    "lightos-drivers.sh --detect; echo; lightos-perf.sh --status"
+    "/usr/local/bin/lightos-drivers --detect; echo; /usr/local/bin/lightos-perf --status"
 }
 
 clean_cache() {

@@ -70,6 +70,12 @@ install -m 0644 "$HERE/config/includes.chroot/usr/share/backgrounds/lightos-wall
                 "$STAGE/icons/" 2>/dev/null || true
 
 mkdir -p "$STAGE/applications"
+# Ярлык Центра приложений: берём из репозитория, чтобы после обновления
+# /usr/share/applications не остался с устаревшим Exec.
+if [ -f "$HERE/config/includes.chroot/usr/share/applications/lightos-appcenter.desktop" ]; then
+  cp -a "$HERE/config/includes.chroot/usr/share/applications/lightos-appcenter.desktop" \
+        "$STAGE/applications/"
+fi
 cat > "$STAGE/applications/lightos-drivers.desktop" <<'EOF'
 [Desktop Entry]
 Version=1.0
@@ -87,7 +93,7 @@ Version=1.0
 Type=Application
 Name=Оптимизация системы
 Comment=Отключить композитор и анимации — ускорить систему
-Exec=xfce4-terminal --title="Оптимизация LightOS" --maximize --command="lightos-perf.sh"
+Exec=xfce4-terminal --title="Оптимизация LightOS" --maximize --command="lightos-perf"
 Icon=lightos-logo
 Terminal=false
 Categories=System;
@@ -98,7 +104,7 @@ Version=1.0
 Type=Application
 Name=Обновить LightOS
 Comment=Обновить LightOS через интернет, без флешки и без другого компьютера
-Exec=xfce4-terminal --title="Обновление LightOS" --maximize --command="sudo lightos-update.sh"
+Exec=xfce4-terminal --title="Обновление LightOS" --maximize --command="sudo lightos-update"
 Icon=lightos-logo
 Terminal=false
 Categories=System;

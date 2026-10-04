@@ -1,15 +1,15 @@
 #!/bin/bash
 # LightOS — обновление системы по кнопке, без флешки и без другого ПК
 #
-# Запуск:   sudo lightos-update.sh              обновить
-#           sudo lightos-update.sh --check      только проверить, есть ли обновление
-#           sudo lightos-update.sh --rollback   откатиться на предыдущую версию
+# Запуск:   sudo lightos-update              обновить
+#           sudo lightos-update --check      только проверить, есть ли обновление
+#           sudo lightos-update --rollback   откатиться на предыдущую версию
 #
 # Как работает:
 #   1) спрашивает у GitHub Releases последний релиз LightOS
 #   2) качает файл SHA256SUMS и сверяет хеш архива (защита от битой загрузки)
 #   3) распаковывает в /usr/local/lib/lightos (маленький архив ~200 КБ, не весь ISO)
-#   4) обновляет /usr/bin/lightos-* и конфиги
+#   4) обновляет команды в /usr/local/bin и конфиги
 #   5) при сбое — автоматический откат на предыдущую версию
 #
 # Важно: обновляется НЕ ядро и НЕ графический стек (для этого ISO).
@@ -27,7 +27,10 @@ BACKUP_VER_FILE="$LIBDIR/VERSION.rollback"
 # удаляется trap'ом при выходе, и откат в следующем запуске не нашёл бы
 # ничего. Раньше он так и не работал.
 CACHEDIR="/var/cache/lightos"
-BINDIR="/usr/bin"
+# Команды кладём в /usr/local/bin — туда же, куда их кладет хук установки
+# (0350), и без расширения .sh. Раньше здесь стоял /usr/bin, и после первого
+# обновления в системе оказывалось по две копии каждой команды.
+BINDIR="/usr/local/bin"
 ICON_DIR="/usr/share/icons/hicolor/128x128/apps"
 DESKTOP_DIR="/usr/share/applications"
 
@@ -67,7 +70,17 @@ rollback() {
   [ -f "$BACKUP_VER_FILE" ] && oldver=$(tr -d '[:space:]' < "$BACKUP_VER_FILE")
   local backup="$CACHEDIR/rollback-${oldver:-unknown}.tar.gz"
 
+  # Подстраховка: если VERSION.rollback потерялся, берём самую свежую
+  # копию из кэша и восстанавливаем её версию из имени файла.
   if [ ! -f "$backup" ]; then
+    backup=$(ls -1t "$CACHEDIR"/rollback-*.tar.gz 2>/dev/null | head -1)
+    if [ -n "$backup" ]; then
+      oldver=$(basename "$backup"); oldver=${oldver#rollback-}; oldver=${oldver%.tar.gz}
+      say "    (файл с номером версии не найден, беру самую свежую копию: $oldver)"
+    fi
+  fi
+
+  if [ -z "$backup" ] || [ ! -f "$backup" ]; then
     warn "Резервной копии нет — откат невозможен.
    Откатываться было не с чего: либо обновление ещё ни разу не
    выполнялось, либо копию уже удалили вручную."
@@ -82,12 +95,24 @@ rollback() {
     find "$LIBDIR/bin" -name 'lightos-*.sh' -exec chmod 0755 {} + 2>/dev/null || true
     while IFS= read -r f; do
       case "$f" in
-        bin/lightos-*.sh)     base=$(basename "$f"); install -m 0755 "$LIBDIR/$f" "$BINDIR/${base%.sh}" 2>/dev/null ;;
+        bin/lightos-*.sh)
+          base=$(basename "$f")
+          case "$base" in
+            lightos-install-copy.sh|lightos-install-post.sh) continue ;;
+          esac
+          # install сквозь симлинк писал бы внутрь $LIBDIR. Заменяем
+          # симлинк обычным файлом — команда не зависит от наличия LIBDIR.
+          rm -f "$BINDIR/${base%.sh}" 2>/dev/null || true
+          install -m 0755 "$LIBDIR/$f" "$BINDIR/${base%.sh}" 2>/dev/null
+          ;;
         applications/*.desktop) install -m 0644 "$LIBDIR/$f" "$DESKTOP_DIR/$(basename "$f")" 2>/dev/null ;;
         icons/*.png)           install -m 0644 "$LIBDIR/$f" "$ICON_DIR/$(basename "$f")" 2>/dev/null ;;
       esac
     done <<< "$(tar -tzf "$backup" | sed 's|^\./||')"
     printf '%s\n' "$oldver" > "$CUR_VER_FILE"
+    # Откат на «до первой версии LightOS»: файла VERSION у этой системы
+    # изначально нет, возвращать слово «неизвестна» тоже незачем.
+    [ "$oldver" = "неизвестна" ] && rm -f "$CUR_VER_FILE"
     rm -f "$BACKUP_VER_FILE"
     ok "откат завершён, версия теперь $oldver"
     return 0
@@ -164,7 +189,7 @@ case "${1:-}" in
     case "$(vercmp "$LATEST_VER" "$CUR_VER")" in
       0) ok "Система уже последней версии ($LATEST_VER)" ;;
       1) warn "Доступно обновление: $CUR_VER -> $LATEST_VER"
-          say "     Запустить:  sudo lightos-update.sh" ;;
+          say "     Запустить:  sudo lightos-update" ;;
       *) warn "У вас версия НОВЕЕ, чем на GitHub ($CUR_VER > $LATEST_VER).
      Если это не ошибка — игнорируйте." ;;
     esac
@@ -176,9 +201,9 @@ case "${1:-}" in
     ;;
   --help|-h)
     say "  Использование:"
-    say "    sudo lightos-update.sh              обновить LightOS"
-    say "    sudo lightos-update.sh --check      проверить наличие обновления"
-    say "    sudo lightos-update.sh --rollback   откатиться на предыдущую версию"
+    say "    sudo lightos-update              обновить LightOS"
+    say "    sudo lightos-update --check      проверить наличие обновления"
+    say "    sudo lightos-update --rollback   откатиться на предыдущую версию"
     exit 0
     ;;
   "") : ;;   # без аргументов — просто обновляемся
@@ -192,7 +217,7 @@ case "$(vercmp "$LATEST_VER" "$CUR_VER")" in
   2) say ""
       warn "У вас $CUR_VER, а на GitHub $LATEST_VER — у вас НОВЕЕ.
    Обновление пропущено. Если это не ошибка, вернитесь на старую:"
-      say "     sudo lightos-update.sh --rollback"
+      say "     sudo lightos-update --rollback"
       exit 0 ;;
 esac
 
@@ -255,12 +280,19 @@ fi
 ok "файлы обновлены"
 
 # --- Установка скриптов в PATH и на Рабочий стол ----------------------------
+# install-copy и install-post нужны только во время установки (их зовёт
+# Calamares/хук). На работающей системе они опасны: install-post делает
+# apt purge и update-initramfs. В /usr/local/bin их не кладём.
 step "Обновляю команды в $BINDIR..."
 COUNT=0
 while IFS= read -r f; do
   case "$f" in
     bin/lightos-*.sh)
       base=$(basename "$f")
+      case "$base" in
+        lightos-install-copy.sh|lightos-install-post.sh) continue ;;
+      esac
+      rm -f "$BINDIR/${base%.sh}" 2>/dev/null || true
       install -m 0755 "$LIBDIR/$f" "$BINDIR/${base%.sh}" && COUNT=$((COUNT+1))
       ;;
     applications/*.desktop)
@@ -280,7 +312,11 @@ if [ -x "$LIBDIR/post-update.sh" ]; then
 fi
 
 printf '%s\n' "$LATEST_VER" > "$CUR_VER_FILE"
-[ -n "$CUR_VER" ] && [ "$CUR_VER" != "неизвестна" ] && printf '%s\n' "$CUR_VER" > "$BACKUP_VER_FILE"
+# Записываем версию для отката ВСЕГДА, даже если она была «неизвестна»:
+# резервная копия rollback-неизвестна.tar.gz в этом случае создаётся выше,
+# а раньше VERSION.rollback не появлялся — и откат, который мы сами же
+# рекомендуем в конце вывода, ругался «резервной копии нет».
+printf '%s\n' "$CUR_VER" > "$BACKUP_VER_FILE"
 
 update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
 gtk-update-icon-cache -tf /usr/share/icons/hicolor 2>/dev/null || true
@@ -293,6 +329,6 @@ say "    * ядро Linux          — кнопка «Обновить сист�
 say "    * драйверы видеокарты — кнопка «Драйверы» (или переустановка ISO)"
 say "    * сам установщик Calamares"
 say ""
-say "  Откат:  sudo lightos-update.sh --rollback"
+say "  Откат:  sudo lightos-update --rollback"
 say ""
 exit 0

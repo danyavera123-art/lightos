@@ -144,11 +144,12 @@ glxinfo -B | grep "OpenGL renderer"
 
 ```bash
 sudo lightos-drivers      # драйверы
-lightos-perf.sh           # оптимизация
-lightos-perf.sh --status  # только посмотреть, ничего не меняя
-sudo lightos-update.sh    # обновить LightOS
-sudo lightos-update.sh --check     # есть ли обновление
-sudo lightos-update.sh --rollback  # откатиться на предыдущую версию
+lightos-drivers --detect # только определить железо, ничего не ставить
+lightos-perf             # оптимизация
+lightos-perf --status    # только посмотреть, ничего не меняя
+sudo lightos-update      # обновить LightOS
+sudo lightos-update --check     # есть ли обновление
+sudo lightos-update --rollback  # откатиться на предыдущую версию
 ```
 
 ### Про игры
@@ -216,7 +217,15 @@ lightos/
 ### Скрипты системы
 
 Все лежат в `config/includes.chroot/usr/bin/`, при сборке копируются
-в `/usr/local/lib/lightos/bin/` и вызываются из `/usr/local/bin/`.
+в `/usr/local/lib/lightos/bin/`. Команды для пользователя появляются в
+`/usr/local/bin` уже без расширения `.sh`:
+
+| Команда | Что делает |
+|---------|-----------|
+| `lightos-appcenter` | Центр приложений |
+| `sudo lightos-drivers` | Определить железо и поставить драйверы |
+| `lightos-perf` | Оптимизация под слабое железо |
+| `sudo lightos-update` | Обновление LightOS из интернета |
 
 | Файл | Назначение |
 |------|-----------|
@@ -227,6 +236,10 @@ lightos/
 | `lightos-firstboot.sh` | Тема и обои при первом входе |
 | `lightos-install-copy.sh` | Копирование live-системы на диск |
 | `lightos-install-post.sh` | Настройка после установки, сборка DKMS-модулей |
+
+`lightos-install-copy.sh` и `lightos-install-post.sh` — служебные, их зовёт
+установщик Calamares. В `/usr/local/bin` они намеренно не попадают: запускать
+их на работающей системе нельзя.
 
 ### Хуки сборки
 
@@ -298,7 +311,7 @@ ls -lh lightos.iso
 **Как откатить обновление LightOS?**
 
 ```bash
-sudo lightos-update.sh --rollback
+sudo lightos-update --rollback
 ```
 
 Резервная копия предыдущей версии лежит в `/var/cache/lightos/`.
