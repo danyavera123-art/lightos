@@ -1,0 +1,33 @@
+name: Диагностика live-build
+
+# Временный воркфлоу: печатает версию и полный список опций lb config,
+# чтобы build.sh не ловил удалённые опции по одной.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ставим live-build
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends live-build debootstrap
+      - name: Версия и опции
+        run: |
+          echo "### lb --version"
+          lb --version
+          echo
+          echo "### apt: какой live-build стоит"
+          apt-cache policy live-build
+          echo
+          echo "### lb config --help (полный)"
+          lb config --help 2>&1
+          echo
+          echo "### опции одним списком"
+          lb config --help 2>&1 | grep -oE '\-\-[a-z0-9-]+' | sort -u
