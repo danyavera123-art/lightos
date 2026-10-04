@@ -17,3 +17,11 @@ config/clean
 config/install
 config/linux
 *.tmp
+
+# Пакет обновления (собирается make-update-payload.sh перед публикацией)
+dist-update/
+dist/
+
+# Локальные логи и заготовки
+*.log
+release-notes.md

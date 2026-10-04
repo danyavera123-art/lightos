@@ -13,6 +13,22 @@ xserver-xorg-video-vesa
 xserver-xorg-video-fbdev
 xinit
 
+# Драйверы видеокарт (без них система падает на vesa — очень медленно)
+# radeon обязателен для Radeon HD 54xx (Park/Cedar) — это rebadge чипа Cedar,
+# amdgpu его НЕ поддерживает (ищет прошивку PITCAIRN, которой нет)
+xserver-xorg-video-radeon
+xserver-xorg-video-amdgpu
+xserver-xorg-video-intel
+xserver-xorg-video-nouveau
+
+# Прошивки AMD (CEDAR_* нужны radeon для Park; PALADIN для новых карт)
+firmware-amd-graphics
+
+# Проверка графики: glxinfo, glxgears — нужны пользователю для диагностики
+mesa-utils
+mesa-va-drivers
+mesa-vdpau-drivers
+
 # Дисплейный менеджер
 lightdm
 lightdm-gtk-greeter
@@ -72,4 +88,11 @@ firmware-linux
 firmware-iwlwifi
 firmware-realtek
 firmware-atheros
-firmware-brcm80211
+
+# Broadcom BCM4313/4321 (ноутбуки HP/Lenovo/Dell 2009-2012):
+# открытый b43 эти чипы НЕ поддерживает (в b43_bcma_tbl нет core id 0x13),
+# поэтому нужен проприетарный broadcom-sta (пакет wl) + dkms для сборки модуля.
+# Прошивки лежат внутри пакета broadcom-sta-dkms, firmware-brcm80211 тут не поможет.
+dkms
+broadcom-sta-dkms
+linux-headers-amd64
