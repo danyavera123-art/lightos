@@ -2,7 +2,7 @@
 Type=Application
 Name=LightOS First Boot
 Comment=Применение темы и обоев при первом входе
-Exec=/usr/bin/lightos-firstboot.sh
+Exec=lightos-firstboot
 Icon=lightos-logo
 Hidden=false
 X-GNOME-Autostart-enabled=true

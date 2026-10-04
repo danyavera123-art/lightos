@@ -2,7 +2,15 @@
 <channel name="xfwm4" version="1.0">
   <property name="general" type="empty">
     <property name="theme" type="string" value="LightOS-Dark"/>
-    <property name="use_compositing" type="bool" value="true"/>
+    <!-- Композитор ВЫКЛЮЧЁН намеренно. На Intel GMA / Radeon Cedar он
+         съедает 15-30% CPU в обычной работе и 30-60% FPS в играх
+         (Minecraft, Roblox). Вернуть:
+         xfconf-query -c xfwm4 -p /general/use_compositing -t bool -s true -->
+    <property name="use_compositing" type="bool" value="false"/>
+    <property name="animations" type="string" value="none"/>
+    <property name="show_shadow" type="bool" value="false"/>
+    <property name="show_frame_shadow" type="bool" value="false"/>
+    <property name="show_popup_shadow" type="bool" value="false"/>
     <property name="button_layout" type="string" value="O|HMC"/>
     <property name="title_font" type="string" value="DejaVu Sans Bold 10"/>
     <property name="workspace_count" type="int" value="2"/>

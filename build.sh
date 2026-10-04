@@ -1,13 +1,37 @@
 #!/bin/bash
 # LightOS build script (Debian 12 + XFCE + Calamares)
-# Запуск: sudo ./build.sh
-# После сборки: lightos.iso
-# Публикация в GitHub Releases, если есть gh. Отключить: SKIP_RELEASE=1
+#
+# Запуск:
+#   sudo ./build.sh                    ISO в корень репозитория
+#   sudo ./build.sh --output-dir DIR   ISO в указанный каталог (для CI)
+#
+# После сборки: lightos.iso + SHA256SUMS
+# Публикация в GitHub Releases, если есть gh и он авторизован.
+# Отключить: SKIP_RELEASE=1
 set -e
 set -o pipefail
 
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
+
+# --- Разбор аргументов -------------------------------------------------------
+OUTPUT_DIR="$ROOT"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output-dir)
+      [ -n "${2:-}" ] || { echo "--output-dir требует путь" >&2; exit 1; }
+      OUTPUT_DIR="$2"; shift 2 ;;
+    --output-dir=*)
+      OUTPUT_DIR="${1#*=}"; shift ;;
+    -h|--help)
+      echo "Использование: sudo ./build.sh [--output-dir DIR]"
+      exit 0 ;;
+    *)
+      echo "Неизвестный аргумент: $1" >&2
+      echo "Использование: sudo ./build.sh [--output-dir DIR]" >&2
+      exit 1 ;;
+  esac
+done
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Запусти от root: sudo ./build.sh" >&2
@@ -61,16 +85,44 @@ publish_github_release() {
     return 0
   fi
 
-  echo "==> Публикация $iso в GitHub Releases (tag: latest)"
-  if gh release view latest >/dev/null 2>&1; then
-    gh release upload latest "$iso" "$sums" --clobber
+  # Тег — семвер, а не «latest»: кнопка «Обновить LightOS» ищет последний
+  # релиз через API, и «latest» там не версия, а имя, которое невозможно
+  # сравнить и переопределить при выпуске правок.
+  # RELEASE_TAG задаётся извне (например, GitHub Actions подставляет свой).
+  local tag="${RELEASE_TAG:-v1.0.0}"
+  echo "==> Публикация $iso в GitHub Releases (tag: $tag)"
+
+  # Пакет обновления едет вместе с ISO: без него кнопка обновления
+  # на установленной системе будет бесполезна.
+  local payload="$ROOT/dist-update/lightos-update-${tag#v}.tar.gz"
+  local extra=()
+  if [ -f "$payload" ]; then
+    extra+=("$payload")
+    if [ -f "$ROOT/dist-update/SHA256SUMS" ]; then
+      extra+=("$ROOT/dist-update/SHA256SUMS")
+    fi
   else
-    gh release create latest "$iso" "$sums" \
-      --title "LightOS" \
-      --notes "Гибридный ISO LightOS (Debian 12 + XFCE). Запись: Rufus (DD) / balenaEtcher / Ventoy." \
-      --latest
+    echo "==> Пакет обновления не найден ($payload). Соберите его:"
+    echo "    ./make-update-payload.sh ${tag#v}"
   fi
-  echo "==> Релиз: $(gh release view latest --json url -q .url 2>/dev/null || echo latest)"
+
+  local notes="Гибридный ISO LightOS (Debian 12 + XFCE).
+
+Запись на флешку: Rufus (режим DD) / balenaEtcher / Ventoy.
+
+Дальше: загрузитесь с флешки, запустите «Установить LightOS».
+После установки откройте Центр приложений -> «Драйверы»."
+
+  if gh release view "$tag" >/dev/null 2>&1; then
+    echo "==> Релиз $tag уже есть — перезаписываем файлы"
+    gh release upload "$tag" "$iso" "$sums" ${extra[@]+"${extra[@]}"} --clobber
+    gh release edit "$tag" --notes "$notes" >/dev/null
+  else
+    gh release create "$tag" "$iso" "$sums" ${extra[@]+"${extra[@]}"} \
+      --title "LightOS $tag" \
+      --notes "$notes"
+  fi
+  echo "==> Релиз: $(gh release view "$tag" --json url -q .url 2>/dev/null || echo "$tag")"
 }
 
 strip_crlf
@@ -86,7 +138,24 @@ if [ "${CI:-}" = "true" ]; then
 fi
 
 echo "==> Очистка предыдущей сборки (если есть)"
+# lb clean удаляет ТОЛЬКО живые-build каталоги (cache, chroot, lbwork,
+# config/auto, config/common). Авторские файлы в config/ (package-lists,
+# hooks, archives, includes.chroot) он не трогает — проверено.
+# Но на всякий случай предупреждаем, если какие-то наши файлы исчезнут.
+OUR_FILES_BEFORE="$(find config/package-lists config/hooks config/includes.chroot \
+                        config/archives -type f 2>/dev/null | sort || true)"
 lb clean 2>/dev/null || true
+
+MISSING=""
+for f in $OUR_FILES_BEFORE; do
+  [ -f "$f" ] || MISSING="$MISSING $f"
+done
+if [ -n "$MISSING" ]; then
+  echo "!! ВНИМАНИЕ: lb clean удалил наши файлы:" >&2
+  for f in $MISSING; do echo "   $f" >&2; done
+  echo "   Отмените сборку и восстановите их: git checkout -- config/" >&2
+  exit 1
+fi
 
 LB_HELP="$(lb config --help 2>&1 || true)"
 
@@ -110,7 +179,6 @@ LB_ARGS=(
   --mirror-chroot-security "http://security.debian.org/debian-security/"
   --mirror-binary "http://deb.debian.org/debian/"
   --mirror-binary-security "http://security.debian.org/debian-security/"
-  --bootstrap-keyring "debian-archive-keyring"
   --security false
   --updates false
   --source false
@@ -199,7 +267,54 @@ fi
 
 lb config "${LB_ARGS[@]}"
 
-echo "==> Сборка образа (30-90 минут)..."
+echo "==> Проверяю, что все пакеты из списка существуют в репозитории..."
+# Заранее ловим опечатки в списках пакетов. live-build падает на этапе
+# apt install, когда не хватает ОДНОГО пакета — через 40 минут работы.
+# Дешевле проверить сейчас, до debootstrap.
+#
+# Скачиваем индексы один раз и ищем по ним. Обращение к packages.debian.org
+# для каждого пакета отдельно — это 84 запроса и вечный бан по rate limit.
+PKGLIST="$(find config/package-lists -name '*.list.chroot' -print0 2>/dev/null \
+  | xargs -0 -r grep -hvE '^\s*(#|$)' 2>/dev/null \
+  | sed 's/[[:space:]]*$//' | sort -u)"
+PKGCOUNT="$(printf '%s\n' "$PKGLIST" | grep -c . || true)"
+
+if command -v curl >/dev/null 2>&1; then
+  echo "    пакетов в списках: $PKGCOUNT"
+  TMPIDX="$(mktemp -d /tmp/lb-idx.XXXXXX)"
+  # main + contrib + non-free + non-free-firmware: пакет может лежать в любой
+  for suite in main contrib non-free non-free-firmware; do
+    URL="http://deb.debian.org/debian/dists/bookworm/${suite}/binary-amd64/Packages.gz"
+    curl -fsSL --connect-timeout 10 --max-time 120 "$URL" -o "$TMPIDX/$suite.gz" 2>/dev/null || true
+  done
+  if ls "$TMPIDX"/*.gz >/dev/null 2>&1; then
+    cat "$TMPIDX"/*.gz 2>/dev/null | gzip -dc 2>/dev/null \
+      | grep '^Package: ' | sed 's/^Package: //' | sort -u > "$TMPIDX/all.txt" 2>/dev/null || true
+    if [ -s "$TMPIDX/all.txt" ]; then
+      MISSING_LIST="$(printf '%s\n' "$PKGLIST" | grep . | grep -vxF -f "$TMPIDX/all.txt" || true)"
+      if [ -n "$MISSING_LIST" ]; then
+        echo "!! ВНИМАНИЕ: эти пакеты НЕ НАЙДЕНЫ в bookworm:" >&2
+        printf '%s\n' "$MISSING_LIST" | sed 's/^/       /' >&2
+        echo "   Сборка упадёт на этапе установки пакетов. Исправьте списки" >&2
+        echo "   в config/package-lists/ и запустите сборку заново." >&2
+        rm -rf "$TMPIDX"
+        exit 1
+      fi
+      echo "    все $PKGCOUNT пакетов найдены в bookworm"
+    else
+      echo "    (индексы пустые — пропускаем проверку)"
+    fi
+  else
+    echo "    (не удалось скачать индексы — пропускаем проверку)"
+  fi
+  rm -rf "$TMPIDX"
+else
+  echo "    (нет curl — проверку списков пропускаем)"
+fi
+
+echo "==> Сборка образа. Это долго: debootstrap 20-40 мин, установка пакетов
+    60-120 мин, сжатие squashfs 40-90 мин. Итого 2.5-5 часов на слабом CPU.
+    На быстром CI-раннере — около 15 минут."
 lb build 2>&1 | tee build.log
 
 ISO_SRC="$(ls -1t "$ROOT"/*.iso 2>/dev/null | head -n1 || true)"
@@ -208,17 +323,33 @@ if [ -z "$ISO_SRC" ]; then
   exit 1
 fi
 
-ISO_DST="$ROOT/lightos.iso"
+mkdir -p "$OUTPUT_DIR"
+# Если каталог вывода — это сам корень репозитория, зовём файл lightos.iso
+if [ "$(readlink -f "$OUTPUT_DIR")" = "$(readlink -f "$ROOT")" ]; then
+  ISO_DST="$ROOT/lightos.iso"
+else
+  ISO_DST="$OUTPUT_DIR/lightos.iso"
+fi
+
 if [ "$(readlink -f "$ISO_SRC")" != "$(readlink -f "$ISO_DST")" ]; then
   mv -f "$ISO_SRC" "$ISO_DST"
 fi
 
-sha256sum "$ISO_DST" | tee "$ROOT/SHA256SUMS"
+SHA_DST="$(dirname "$ISO_DST")/SHA256SUMS"
+( cd "$(dirname "$ISO_DST")" && sha256sum "$(basename "$ISO_DST")" ) | tee "$SHA_DST"
 ls -lh "$ISO_DST"
+
+SIZE_MB=$(du -m "$ISO_DST" | cut -f1)
+if [ "$SIZE_MB" -gt 2000 ]; then
+  echo ""
+  echo "!! ВНИМАНИЕ: ISO занимает ${SIZE_MB} МБ, а лимит GitHub Releases — 2000 МБ."
+  echo "   Опубликовать такой файл не получится. Нужно ужать образ."
+fi
 
 echo ""
 echo "=============================================="
 echo " Готово! Образ: $ISO_DST"
+echo " Размер: ${SIZE_MB} МБ"
 echo "=============================================="
 
-publish_github_release "$ISO_DST" "$ROOT/SHA256SUMS"
+publish_github_release "$ISO_DST" "$SHA_DST"

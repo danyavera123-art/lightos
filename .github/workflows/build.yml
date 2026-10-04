@@ -1,0 +1,211 @@
+name: Сборка LightOS
+
+# Сборка ISO и публикация в GitHub Releases.
+# Нужный запуск вручную: вкладка Actions -> Сборка LightOS -> Run workflow.
+# Ничего не запускается само по push — сборка тяжёлая.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия релиза, например 1.0.0 (или 1.0.0-rc1). Без буквы v.'
+        required: true
+        default: '1.0.0'
+      publish:
+        description: 'Опубликовать ISO в Releases после сборки?'
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lightos-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # 4 ГБ RAM: debootstrap + установка 700+ пакетов + squashfs с xz.
+    # На 2 ГБ live-build умирает на этапе сжатия.
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Берём исходники
+        uses: actions/checkout@v4
+
+      - name: Ставим зависимости
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            live-build \
+            debootstrap \
+            debian-archive-keyring \
+            isolinux \
+            syslinux-common \
+            squashfs-tools \
+            xorriso \
+            mtools \
+            dosfstools \
+            parted \
+            fdisk \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            ca-certificates
+
+      - name: Проверяем, что live-build живой
+        run: |
+          lb --version
+          debootstrap --version
+          echo "OK: сборка может идти"
+
+      - name: Собираем ISO
+        env:
+          # build.sh читает RELEASE_TAG, чтобы опубликовать ISO
+          # под тем же тегом, под которым выходит пакет обновления.
+          RELEASE_TAG: v${{ github.event.inputs.version }}
+        run: |
+          set -e
+          VERSION='${{ github.event.inputs.version }}'
+          TAG="v${VERSION}"
+          echo "::group::Сборка LightOS ${TAG}"
+
+          # Скачиваем ISO в отдельный каталог, чтобы build.sh
+          # ничего не испортил в рабочем дереве репозитория
+          OUT="$PWD/_artifacts"
+          mkdir -p "$OUT"
+
+          bash ./build.sh --output-dir "$OUT" || {
+            echo "::error::Сборка упала. Лог выше — ищите строку с ошибкой live-build."
+            exit 1
+          }
+
+          ISO=$(find "$OUT" -maxdepth 1 -name '*.iso' | head -1)
+          [ -n "$ISO" ] || { echo "::error::ISO не найден в $OUT"; ls -la "$OUT"; exit 1; }
+
+          SIZE_MB=$(du -m "$ISO" | cut -f1)
+          echo "ISO собран: $ISO (${SIZE_MB} МБ)"
+
+          # Лимит GitHub Releases — 2 ГБ. Если переросли, это надо знать.
+          if [ "$SIZE_MB" -gt 2000 ]; then
+            echo "::error::ISO ${SIZE_MB} МБ больше лимита GitHub Releases (2000 МБ). Публикация невозможна без уменьшения."
+            exit 1
+          fi
+
+          mv "$ISO" "$OUT/lightos-${VERSION}.iso"
+          ( cd "$OUT" && sha256sum "lightos-${VERSION}.iso" > "lightos-${VERSION}.iso.sha256" )
+          ls -la "$OUT"
+
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "ARTIFACT=$(ls "$OUT" | grep '\.iso$')" >> "$GITHUB_ENV"
+
+      - name: Прикрепляем ISO к репозиторию
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightos-${{ github.event.inputs.version }}
+          path: |
+            _artifacts/lightos-${{ github.event.inputs.version }}.iso
+            _artifacts/lightos-${{ github.event.inputs.version }}.iso.sha256
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Готовим пакет обновления (для кнопки «Обновить LightOS»)
+        run: |
+          set -e
+          VERSION='${{ github.event.inputs.version }}'
+          bash ./make-update-payload.sh "$VERSION"
+          ls -la dist-update/
+
+      - name: Прикрепляем пакет обновления
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightos-update-${{ github.event.inputs.version }}
+          path: |
+            dist-update/lightos-update-${{ github.event.inputs.version }}.tar.gz
+            dist-update/SHA256SUMS
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Публикуем в Releases
+        if: github.event.inputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ github.event.inputs.version }}
+        run: |
+          set -e
+          VERSION='${{ github.event.inputs.version }}'
+
+          # YAML убирает общий отступ блока run, поэтому строки heredoc
+          # начинаются с нуля — «<<-EOT» не нужен и табы не требуются.
+          cat > release-notes.md <<EOT
+          ## LightOS ${TAG}
+
+          | | |
+          |---|---|
+          | Дистрибутив | Debian 12 (bookworm) |
+          | Рабочий стол | XFCE, композитор выключен |
+          | Установщик | Calamares |
+
+          ### Что нового
+          * Драйверы видеокарты ставятся автоматически: дискретный Radeon
+            больше не остаётся без драйвера. Это была главная причина лагов.
+          * Wi-Fi Broadcom BCM4313/4321: вместо бесполезного firmware-brcm80211
+            ставится проприетарный broadcom-sta через DKMS.
+          * Кнопка «Обновить LightOS» — обновляет систему через интернет,
+            без флешки и без другого компьютера.
+          * Кнопка «Оптимизация» — отключает композитор и анимации.
+          * Исправлена битая опция --bootstrap-keyring, из-за которой
+            сборка падала на lb config.
+
+          ### Файлы
+          | Файл | Для чего |
+          |---|---|
+          | lightos-${VERSION}.iso | запись на флешку и установка |
+          | lightos-${VERSION}.iso.sha256 | проверка целостности ISO |
+          | lightos-update-${VERSION}.tar.gz | кнопка «Обновить LightOS» |
+          | SHA256SUMS | контрольные суммы пакета обновления |
+
+          ### Как ставить
+          1. Запишите ISO на флешку: Rufus в режиме DD, balenaEtcher или Ventoy.
+          2. Загрузитесь с флешки и запустите «Установить LightOS».
+          3. После установки: Центр приложений -> «Драйверы».
+          EOT
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Релиз $TAG уже существует — перезаписываем файлы"
+            gh release upload "$TAG" \
+              "dist-update/lightos-update-${VERSION}.tar.gz" \
+              dist-update/SHA256SUMS \
+              "_artifacts/lightos-${VERSION}.iso" \
+              "_artifacts/lightos-${VERSION}.iso.sha256" \
+              --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --notes-file release-notes.md --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" \
+              "_artifacts/lightos-${VERSION}.iso" \
+              "_artifacts/lightos-${VERSION}.iso.sha256" \
+              "dist-update/lightos-update-${VERSION}.tar.gz" \
+              dist-update/SHA256SUMS \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "LightOS $TAG" \
+              --notes-file release-notes.md
+          fi
+
+          echo "::notice::Опубликовано: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+
+      - name: Итог
+        run: |
+          echo "### Сборка ${TAG} завершена" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Файл | Размер |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          ls -la _artifacts/ dist-update/ 2>/dev/null | grep -E '\.iso|\.tar\.gz' \
+            | awk '{printf "| %s | %s |\n", $9, $5}' >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ github.event.inputs.publish }}" = "true" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Опубликовано: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Публикация была отключена. Скачайте ISO из артефактов этого запуска." >> "$GITHUB_STEP_SUMMARY"
+          fi
