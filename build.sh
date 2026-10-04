@@ -167,8 +167,11 @@ elif [ -f /usr/share/keyrings/debian-archive-keyring.pgp ]; then
 fi
 
 echo "==> Конфигурация live-build"
-# --security/--updates false: старый live-build пишет несуществующий suite bookworm/updates.
-# Правильные репозитории: config/archives/*.list.{chroot,binary}
+# --security/--updates НЕ передаём безусловно: в свежем live-build (на
+# ubuntu-latest он именно такой, 2024-08 и новее) эти опции удалены, и lb
+# падает с «unrecognized option '--updates'». У старого live-build они
+# отключали несуществующий suite bookworm/updates; у нового за этот suite
+# отвечает хук 0000-fix-security-suite. Ниже опции добавляются через lb_has.
 LB_ARGS=(
   --distribution bookworm
   --system live
@@ -179,8 +182,6 @@ LB_ARGS=(
   --mirror-chroot-security "http://security.debian.org/debian-security/"
   --mirror-binary "http://deb.debian.org/debian/"
   --mirror-binary-security "http://security.debian.org/debian-security/"
-  --security false
-  --updates false
   --source false
   --cache-packages "$CACHE_PACKAGES"
   --apt-indices false
@@ -192,6 +193,14 @@ LB_ARGS=(
   --memtest none
   --bootappend-live "boot=live components quiet splash"
 )
+
+# Эти опции есть только у старого live-build — берём их из его справки.
+if lb_has --security; then
+  LB_ARGS+=(--security false)
+fi
+if lb_has --updates; then
+  LB_ARGS+=(--updates false)
+fi
 
 if lb_has --mode; then
   LB_ARGS+=(--mode debian)

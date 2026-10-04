@@ -1,9 +1,34 @@
 #!/bin/bash
 # Debian 12: live-build (особенно на Ubuntu) пишет suite bookworm/updates
-# вместо bookworm-security. Исправляем до/после установки пакетов.
+# вместо bookworm-security, которого у bookworm не существует. apt на такой
+# строке падает, поэтому заменяем. Дальше убираем дубликаты: после замены
+# в deb822-файлах строка Suites: может содержать bookworm-security дважды,
+# а apt дубликаты в Suites не любит.
 set -e
 
 find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -print0 2>/dev/null \
   | xargs -0 -r sed -i 's|bookworm/updates|bookworm-security|g'
+
+# Однострочные .list уже чистые, а вот deb822-формат требует ручной правки:
+#   Suites: bookworm bookworm-security bookworm-security
+for f in $(find /etc/apt -type f -name '*.sources' 2>/dev/null); do
+  [ -f "$f" ] || continue
+  # схлопываем повторы внутри строки Suites, сохраняя порядок
+  awk '
+    /^Suites:/ {
+      n = split($0, a, /[[:space:]]+/)
+      out = a[1]
+      delete seen
+      seen[a[1]] = 1
+      for (i = 2; i <= n; i++) {
+        if (a[i] == "" || a[i] ~ /^#/) continue
+        if (!(a[i] in seen)) { out = out " " a[i]; seen[a[i]] = 1 }
+      }
+      print out
+      next
+    }
+    { print }
+  ' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+done
 
 exit 0
