@@ -42,6 +42,14 @@
 
 Ничего ставить локально не нужно.
 
+Сборка идёт **в контейнере `debian:bookworm`**, а не на Ubuntu-раннере.
+Это не просто прихоть: в Ubuntu 24.04 ставится live-build `3.0~a57`,
+который при установке ядра качает
+`dists/bookworm/Contents-amd64.gz` — а Debian перенёс Contents внутрь
+компонентов, и по старому пути отдаётся 404. В bookworm живёт
+live-build `20230502`, который этот файл не качает вовсе. Плюс мы
+собираем bookworm и собираем на bookworm.
+
 ### Вариант B. Локально, на Debian
 
 Собирать нужно на **Debian** (12 или 13) — не на Ubuntu: в Ubuntu
@@ -78,7 +86,25 @@ bash -n build.sh                     # синтаксис
 sudo ./build.sh --output-dir /tmp/x  # дойдёт до debootstrap — дальше Ctrl+C
 ```
 
-### Вариант C. WSL2 на Windows
+### Вариант C. Локально, в контейнере (без установки на хост)
+
+То же, что воркфлоу, но у себя — нужно только Docker:
+
+```bash
+git clone https://github.com/danyavera123-art/lightos.git
+cd lightos
+
+docker run --rm -it -v "$PWD:/build" debian:bookworm bash -c '
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y -qq --no-install-recommends git live-build debootstrap \
+     debian-archive-keyring isolinux syslinux-common squashfs-tools xorriso \
+     mtools dosfstools parted fdisk grub-pc-bin grub-efi-amd64-bin ca-certificates curl file
+  SKIP_RELEASE=1 ./build.sh
+'
+```
+
+### Вариант D. WSL2 на Windows
 
 Работает, но в WSL нужно ставить зависимости вручную (см. вариант B),
 а сборочные файлы живут в `~/lightos`, а не в `/mnt/c/...` — иначе сборка
