@@ -1,7 +1,7 @@
 name: Диагностика live-build
 
-# Временный воркфлоу: достаём установленный live-build, чтобы понять,
-# зачем он качает Contents-amd64.gz и как это обойти.
+# Временный воркфлоу: сравниваем live-build из bookworm и из noble
+# и смотрим, кто вообще качает Contents-amd64.gz.
 on:
   workflow_dispatch:
 
@@ -9,37 +9,41 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  bookworm:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:bookworm
+    timeout-minutes: 15
+    steps:
+      - name: Ставим зависимости
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends ca-certificates live-build debootstrap
+      - name: Версия и наличие Contents-запроса
+        run: |
+          echo "### bookworm: live-build"
+          lb --version
+          apt-cache policy live-build | head -3
+          echo
+          echo "### кто качает Contents-"
+          grep -rn 'Contents-' /usr/lib/live/build/ /usr/bin/lb 2>/dev/null | head -10 || echo "(не найдено)"
+          echo
+          echo "### есть ли lb_chroot_linux-image"
+          ls /usr/lib/live/build/ | head -40
+
+  noble:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Ставим live-build
+      - name: Ставим зависимости
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends live-build debootstrap
-      - name: Где лежит и что качает Contents
+          sudo apt-get install -y -qq --no-install-recommends ca-certificates live-build
+      - name: Версия и код
         run: |
-          echo "### файлы live-build"
-          dpkg -L live-build | grep -E 'bin|/lb_' | head -30
+          echo "### noble: live-build"
+          lb --version
           echo
-          echo "### где в коде упоминается Contents"
-          grep -rn 'Contents-' /usr/bin/lb_* /usr/share/live/build/ 2>/dev/null | head -20
-          echo
-          echo "### сам кусок кода вокруг Contents"
-          for f in /usr/bin/lb_* /usr/share/live/build/*; do
-            [ -f "$f" ] || continue
-            if grep -q 'Contents-' "$f" 2>/dev/null; then
-              echo "--- $f ---"
-              grep -n -B12 -A12 'Contents-' "$f" | head -70
-            fi
-          done
-          echo
-          echo "### существует ли Contents на зеркале"
-          for u in \
-            http://deb.debian.org/debian/dists/bookworm/Contents-amd64.gz \
-            http://deb.debian.org/debian/dists/bookworm/main/Contents-amd64.gz \
-            http://deb.debian.org/debian/dists/bookworm/Contents-all.gz ; do
-            printf '%s -> ' "$u"
-            curl -s -o /dev/null -w '%{http_code}\n' "$u"
-          done
+          echo "### кто качает Contents-"
+          grep -rn 'Contents-' /usr/lib/live/build/ /usr/bin/lb 2>/dev/null | head -10 || echo "(не найдено)"
