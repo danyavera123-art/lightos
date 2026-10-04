@@ -41,6 +41,11 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: debian:bookworm
+      # --privileged обязателен: live-build внутри chroot монтирует
+      # /dev/pts и /proc. Без CAP_SYS_ADMIN это даёт
+      #   mount: .../chroot/dev/pts: permission denied
+      # и сборка падает на этапе bootstrap.
+      options: --privileged
     # 4 ГБ RAM: debootstrap + установка 700+ пакетов + squashfs с xz.
     # На 2 ГБ live-build умирает на этапе сжатия.
     timeout-minutes: 150
