@@ -1,13 +1,34 @@
 #!/bin/bash
-# LightOS: live-пользователь (для загрузки с флешки)
+# LightOS: live-пользователь (для загрузки с флешки).
+#
+# ВАЖНО: эти данные живут ТОЛЬКО в live-сессии и не должны попасть
+# на установленную систему. Раньше здесь стояло `echo 'root:lightos' |
+# chpasswd`, и этот пароль вместе с /etc/shadow копировался на диск
+# (в lightos-install-copy.sh /etc/shadow не исключался).
+# Теперь у root нет пароля (только sudo через NOPASSWD в live), а пароль
+# live-пользователя генерируется случайно и не документируется —
+# вход в live и так автоматический (см. 0200-lightos-autologin).
 set -e
 
-if ! id lightos >/dev/null 2>&1; then
-  useradd -m -s /bin/bash lightos
-  echo 'lightos:lightos' | chpasswd
-  usermod -aG sudo,audio,video,plugdev,netdev,input,cdrom lightos
+LIVE_USER="lightos"
+
+if ! id "$LIVE_USER" >/dev/null 2>&1; then
+  useradd -m -s /bin/bash "$LIVE_USER"
+  # Случайный пароль: вход всё равно автоматический, но и знать его
+  # из README/переписки — нельзя. На диск он не попадёт (см. 0350).
+  LIVE_PW="$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 20)"
+  echo "$LIVE_USER:$LIVE_PW" | chpasswd
+  usermod -aG sudo,audio,video,plugdev,netdev,input,cdrom "$LIVE_USER"
 fi
 
-echo 'root:lightos' | chpasswd
+# У root нет пароля в принципе: `passwd -l` закрывает вход по паролю,
+# sudo в live работает через NOPASSWD. В установленной системе root
+# получает пароль от модуля users Calamares.
+passwd -l root >/dev/null 2>&1 || true
+
+# Метка для хука 0350: он удалит эту учётку из готовой системы.
+if ! grep -qs '^lightos-live-marker' /etc/lightos-live-user 2>/dev/null; then
+  printf 'lightos-live-marker\n' > /etc/lightos-live-user
+fi
 
 exit 0

@@ -83,6 +83,47 @@ jobs:
       - name: Берём исходники
         uses: actions/checkout@v4
 
+      # Проверка синтаксика ДО сборки. Сборка занимает ~15 минут и
+      # стоит около гигабайта трафика; ловить опечатку в bash через
+      # 15 минут после старта невыгодно. Этот шаг занимает секунды.
+      - name: Проверяем синтаксис скриптов
+        run: |
+          set -e
+          FAILED=0
+
+          echo "::group::bash -n"
+          while IFS= read -r f; do
+            if bash -n "$f" 2>/tmp/synerr; then
+              echo "  OK    $f"
+            else
+              echo "  FAIL  $f"
+              sed 's/^/        /' /tmp/synerr
+              FAILED=1
+            fi
+          done < <(find config/hooks config/includes.chroot/usr/bin \
+                       build.sh make-update-payload.sh -type f 2>/dev/null | sort)
+          echo "::endgroup::"
+
+          # shellcheck ловит то, чего bash -n не видит: нецитированные
+          # переменные, потерянные коды возврата, опечатки в именах.
+          if command -v shellcheck >/dev/null 2>&1; then
+            echo "::group::shellcheck (критичное)"
+            # SC2086 и SC2181 -- самые частые и самые опасные здесь.
+            # Остальные предупреждения не валят сборку.
+            shellcheck -S error -e SC2086,SC2181 \
+              build.sh make-update-payload.sh \
+              config/includes.chroot/usr/bin/*.sh \
+              config/hooks/live/*.chroot config/hooks/live/*.chroot_early \
+              || FAILED=1
+            echo "::endgroup::"
+          else
+            echo "::warning::shellcheck не установлен -- пропускаем"
+          fi
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::Есть ошибки в скриптах. Сборка не запускается."
+            exit 1
+          fi
       - name: Собираем ISO
         run: |
           set -e

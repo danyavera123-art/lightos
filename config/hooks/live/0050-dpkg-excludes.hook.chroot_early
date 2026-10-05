@@ -1,0 +1,28 @@
+#!/bin/bash
+# LightOS: исключения dpkg — чтобы система была небольшой ЧЕСТНО.
+#
+# Раньше хук 0400 делал `rm -rf /usr/share/doc/* /usr/share/man/*`.
+# Это не уменьшает ISO «правильно»: пакеты остаются зарегистрированы
+# со своими файлами, и `dpkg -V` / `dpkg -L` начинают врать о состоянии
+# системы. Правильный способ — path-exclude, который мы объявляем ДО
+# установки пакетов, чтобы dpkg просто не ставил эти файлы.
+#
+# ВАЖНО: этот хук выполняется ДО установки пакетов (суффикс _early),
+# иначе path-exclude не подействует на уже установленные пакеты.
+set -e
+
+mkdir -p /etc/dpkg/dpkg.cfg.d
+cat > /etc/dpkg/dpkg.cfg.d/lightos-excludes <<'EOF'
+# Создано LightOS для уменьшения образа.
+# Удалить: rm /etc/dpkg/dpkg.cfg.d/lightos-excludes
+path-exclude /usr/share/doc/*
+path-include /usr/share/doc/*/copyright
+path-include /usr/share/doc/*/changelog.Debian*
+path-exclude /usr/share/man/*
+path-exclude /usr/share/info/*
+path-exclude /usr/share/groff/*
+path-exclude /usr/share/lintian/*
+path-exclude /usr/share/linda/*
+EOF
+
+exit 0

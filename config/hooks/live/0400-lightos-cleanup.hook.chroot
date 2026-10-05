@@ -2,8 +2,30 @@
 # LightOS: очистка системы перед созданием squashfs/ISO
 set -e
 
-apt-get -y autoremove --purge 2>/dev/null || true
-apt-get clean 2>/dev/null || true
+# --- Защита загрузочной цепочки --------------------------------------------
+# ЭТО БЫЛА ПРИЧИНА, ПОЧЕМУ СИСТЕМА НЕ ЗАГРУЖАЛАСЬ.
+#
+# `apt-get autoremove --purge` удаляет пакеты, установленные как
+# АВТОМАТИЧЕСКИЕ зависимости. В образе live-boot/live-config стоят
+# как ручные, а вот initramfs-tools приехал именно как авто-зависимость
+# live-boot. Как только live-* вычищались (на этапе установки в
+# lightos-install-post.sh), initramfs-tools становился «осиротевшим»
+# и удалялся целиком вместе с /boot/initrd.img*.
+#
+# Итог: ядро на месте, GRUB есть, а initrd нет — система не грузится.
+#   VFS: Unable to mount root fs / error: file '/boot/initrd.img-*' not found
+#
+# Поэтому пакеты загрузочной цепочки помечаются ручными ЗАРАНЕЕ, и
+# autoremove их не тронет.
+for p in initramfs-tools initramfs-tools-core initramfs-tools-x kexec-tools \
+         live-boot live-config grub-common grub2-common linux-image-amd64; do
+  if dpkg -s "$p" >/dev/null 2>&1; then
+    apt-mark manual "$p" >/dev/null 2>&1 || true
+  fi
+done
+
+apt-get -y autoremove --purge >/dev/null 2>&1 || true
+apt-get clean >/dev/null 2>&1 || true
 rm -rf /var/lib/apt/lists/* 2>/dev/null || true
 rm -f /var/cache/apt/archives/*.deb 2>/dev/null || true
 rm -rf /var/cache/apt/archives/partial 2>/dev/null || true
@@ -11,13 +33,44 @@ rm -rf /var/cache/apt/archives/partial 2>/dev/null || true
 # machine-id сгенерируется заново при установке
 rm -f /etc/machine-id /var/lib/dbus/machine-id 2>/dev/null || true
 
-# Ужимаем ISO (лимит GitHub Releases — 2 ГБ на файл)
-rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/lintian 2>/dev/null || true
+# --- Ужимаем ISO (лимит GitHub Releases — 2 ГБ на файл) --------------------
+# /usr/share/doc, /usr/share/man и прочее НЕ удаляем rm -rf: они уже
+# исключены через dpkg path-exclude в хуке 0050 (корректно, с точки зрения
+# состояния пакета). Здесь убираем только то, что dpkg не контролирует.
+rm -rf /usr/share/lintian /usr/share/linda 2>/dev/null || true
+
+# Локали: оставляем только нужные. Это делается на этапе СБОРКИ образа,
+# поэтому после установки локали добавятся через locale-gen.
 if [ -d /usr/share/locale ]; then
   find /usr/share/locale -mindepth 1 -maxdepth 1 \
     ! -name 'en' ! -name 'en_US' ! -name 'en_GB' \
     ! -name 'ru' ! -name 'ru_RU' \
     -exec rm -rf {} + 2>/dev/null || true
 fi
+
+# --- Проверка загрузочной цепочки -------------------------------------------
+# Лучше упасть на СБОРКЕ, чем отдать пользователю ISO, который не грузится.
+echo "==> Проверяю загрузочную цепочку образа..."
+BOOT_OK=1
+
+if ! ls /usr/lib/live/initrd.img.* >/dev/null 2>&1; then
+  # live-build держит initrd в /usr/lib/live/initrd.img-<версия>
+  if ! find /usr/lib/live /boot -name 'initrd.img*' 2>/dev/null | grep -q .; then
+    echo "!! ВНИМАНИЕ: initrd не найден — live-образ не сможет загрузиться" >&2
+    BOOT_OK=0
+  fi
+fi
+
+if ! ls /lib/modules/*/kernel/fs/squashfs* >/dev/null 2>&1; then
+  echo "!! ВНИМАНИЕ: модуль squashfs не собран в ядре" >&2
+  BOOT_OK=0
+fi
+
+if [ "$BOOT_OK" -ne 1 ]; then
+  echo "!! Сборка образа остановлена: он не загрузится. См. build.sh, шаг" >&2
+  echo "   «Проверяю загрузочную цепочку образа»." >&2
+  exit 1
+fi
+echo "    загрузочная цепочка на месте"
 
 exit 0

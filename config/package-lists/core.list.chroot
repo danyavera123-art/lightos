@@ -1,5 +1,12 @@
 # LightOS — ядро и базовая система
+#
+# initramfs-tools обязан быть ЯВНЫМ пунктом списка, а не приходить
+# авто-зависимостью live-boot: иначе `apt-get autoremove` на этапе
+# установки (lightos-install-post.sh) удалит его вместе с initrd,
+# и установленная система не загрузится. Держим его руками.
 linux-image-amd64
+initramfs-tools
+initramfs-tools-core
 locales
 sudo
 policykit-1
@@ -89,10 +96,23 @@ firmware-iwlwifi
 firmware-realtek
 firmware-atheros
 
-# Broadcom BCM4313/4321 (ноутбуки HP/Lenovo/Dell 2009-2012):
-# открытый b43 эти чипы НЕ поддерживает (в b43_bcma_tbl нет core id 0x13),
-# поэтому нужен проприетарный broadcom-sta (пакет wl) + dkms для сборки модуля.
-# Прошивки лежат внутри пакета broadcom-sta-dkms, firmware-brcm80211 тут не поможет.
-dkms
-broadcom-sta-dkms
-linux-headers-amd64
+# Прошивки Broadcom — открытый драйвер b43
+firmware-brcm80211
+
+# Broadcom BCM4313/4321/4322/4325 (ноутбуки HP/Lenovo/Dell 2009-2012)
+# СПЕЦИАЛЬНО НЕ ВХОДЯТ В ОБРАЗ:
+#   * broadcom-sta-dkms + dkms — тянут за собой linux-headers и сборку
+#     модуля на КАЖДУЮ сборку, даже там, где Broadcom нет вообще.
+#     Это заметная доля размера образа, а на неподдерживаемом ядре
+#     DKMS падает и ломает всю сборку.
+#   * linux-headers-amd64 (мета-пакет, ~500 МБ) — не обязан совпадать
+#     с текущим ядром, из-за чего dkms не мог пересобрать модуль после
+#     обновления ядра. Нужные заголовки ставятся точно под `uname -r`.
+#
+# Что происходит вместо этого: lightos-drivers читает PCI ID адаптера и,
+# если Broadcom ИМЕННО из неподдерживаемых моделей b43, ставит
+# broadcom-sta-dkms + linux-headers-$(uname -r) и собирает модуль wl
+# уже на живой системе, с blacklist b43. На остальных Broadcom ставится
+# открытый b43 без DKMS.
+#
+# Подробности: usr/bin/lightos-drivers.sh, detect_wifi() и секция DKMS.

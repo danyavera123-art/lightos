@@ -1,23 +1,30 @@
 #!/bin/bash
-# LightOS: иконка установщика на рабочем столе live-пользователя
+# LightOS: иконка установщика на рабочем столе live-пользователя.
+# Содержимое ярлыка берётся из includes.chroot/usr/share/applications,
+# а не пишется здесь заново — иначе это вторая копия, которая разъезжается
+# с исходником при правке Exec/Name.
 set -e
 
 DESK="/home/lightos/Desktop"
+SRC="/usr/share/applications/lightos-installer.desktop"
 mkdir -p "$DESK"
 
-cat > "$DESK/install.desktop" <<'EOF'
+if [ -f "$SRC" ]; then
+  cp -f "$SRC" "$DESK/install.desktop"
+else
+  # Страховка на случай, если includes.chroot не применился
+  cat > "$DESK/install.desktop" <<'EOF'
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=Установить LightOS
-Comment=Установить систему на диск
 Exec=sudo calamares
 Icon=lightos-logo
 Terminal=false
 Categories=System;
 EOF
+fi
 chmod +x "$DESK/install.desktop"
-
 chown -R lightos:lightos "$DESK"
 
 exit 0
