@@ -50,6 +50,15 @@ jobs:
     # На 2 ГБ live-build умирает на этапе сжатия.
     timeout-minutes: 150
 
+    # В контейнерных работах GitHub запускает run-шаги под `sh`, а это dash.
+    # Всё, что bash-специфично, там падает: шаг «Проверяем синтаксис» с
+    #   done < <(find ...)
+    # умирал с «Syntax error: redirection unexpected» ещё до проверки.
+    # Явно просим bash для всех шагов этой работы.
+    defaults:
+      run:
+        shell: bash
+
     steps:
       # checkout требует git, а в образе debian:bookworm его нет.
       # Поэтому ставим зависимости ДО checkout.
@@ -210,6 +219,10 @@ jobs:
     if: github.event.inputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Скачиваем артефакты
